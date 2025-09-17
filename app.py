@@ -1,53 +1,66 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="CFB Predictions", layout="wide")
-st.title("🏈 College Football Betting Model")
-
 # Load predictions
-@st.cache_data
-def load_data():
-    return pd.read_csv("predictions_upcoming_full.csv")
+preds = pd.read_csv("predictions_upcoming_full.csv")
 
-df = load_data()
+st.title("🏈 College Football Model Predictions")
 
-# ---- Process for clean table ----
-df["Win %"] = (df["home_win_prob"] * 100).round(1)
-df["Cover %"] = (df["home_cover_prob"] * 100).round(1)
-df["Over %"] = (df["over_prob"] * 100).round(1)
+# --- Search bar ---
+search = st.text_input("🔍 Search for a team:")
 
-# Projected Winner
-df["Projected Winner"] = df.apply(
-    lambda row: row["homeTeam"] if row["home_win_prob"] >= 0.5 else row["awayTeam"],
-    axis=1
+# --- Clean columns ---
+# Calculate projected scores (simple version: spread splits total points)
+def project_scores(row):
+    if pd.notna(row["consensus_spread"]) and pd.notna(row["consensus_total"]):
+        home_score = round((row["consensus_total"] / 2) - (row["consensus_spread"] / 2))
+        away_score = round((row["consensus_total"] / 2) + (row["consensus_spread"] / 2))
+        return f"{int(home_score)} - {int(away_score)}"
+    else:
+        return "N/A"
+
+preds["Projected Score"] = preds.apply(project_scores, axis=1)
+
+# Format team names with spreads
+def format_team(name, spread, home=True):
+    if pd.isna(spread):
+        return name
+    spread_str = f"{spread:+}" if home else f"{-spread:+}"
+    return f"{name} ({spread_str})"
+
+preds["Home Team"] = preds.apply(lambda r: format_team(r["homeTeam"], r["consensus_spread"], home=True), axis=1)
+preds["Away Team"] = preds.apply(lambda r: format_team(r["awayTeam"], r["consensus_spread"], home=False), axis=1)
+
+# Determine projected winner
+preds["Projected Winner"] = preds.apply(
+    lambda r: r["homeTeam"] if r["home_win_prob"] >= 0.5 else r["awayTeam"], axis=1
 )
 
-# Projected Team to Cover
-df["Projected Cover"] = df.apply(
-    lambda row: row["homeTeam"] if row["home_cover_prob"] >= 0.5 else row["awayTeam"],
-    axis=1
-)
+# --- Add team logos (simple placeholder version using ESPN logo links) ---
+# Example: https://a.espncdn.com/i/teamlogos/ncaa/500/61.png
+def team_logo_url(team_name):
+    # This is a placeholder map - you'd expand it with your actual team dataset
+    logos = {
+        "Georgia": "https://a.espncdn.com/i/teamlogos/ncaa/500/61.png",
+        "Georgia Tech": "https://a.espncdn.com/i/teamlogos/ncaa/500/59.png",
+        "Alabama": "https://a.espncdn.com/i/teamlogos/ncaa/500/333.png",
+    }
+    return logos.get(team_name, "https://a.espncdn.com/i/teamlogos/ncaa/500/default.png")
 
-# Projected Score (simple estimate)
-df["Home Score"] = ((df["consensus_total"] + df["consensus_spread"]) / 2).round(0)
-df["Away Score"] = (df["consensus_total"] - df["Home Score"]).round(0)
-df["Projected Score"] = df["Home Score"].astype(int).astype(str) + " - " + df["Away Score"].astype(int).astype(str)
+preds["Winner Logo"] = preds["Projected Winner"].apply(team_logo_url)
 
-# ---- Final clean table ----
-table = df[[
-    "homeTeam",
-    "awayTeam",
-    "consensus_spread",
-    "Projected Winner",
-    "Projected Cover",
-    "Projected Score"
-]].rename(columns={
-    "homeTeam": "Home Team",
-    "awayTeam": "Away Team",
-    "consensus_spread": "Spread"
-})
+# Build final display dataframe
+display_df = preds[["Home Team", "Away Team", "Projected Winner", "Projected Score", "Winner Logo"]]
 
-# Show table
-st.subheader("📅 Model Projections")
-st.dataframe(table, use_container_width=True)
+# --- Apply search filter ---
+if search:
+    display_df = display_df[
+        display_df["Home Team"].str.contains(search, case=False) |
+        display_df["Away Team"].str.contains(search, case=False)
+    ]
+
+# --- Display table ---
+st.dataframe(display_df, use_container_width=True)
+
+
 
