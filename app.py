@@ -21,12 +21,23 @@ def project_scores(row):
 
 preds["Projected Score"] = preds.apply(project_scores, axis=1)
 
-# Format team names with spreads
+# Example logo lookup (expand as needed)
+def team_logo_url(team_name):
+    logos = {
+        "Georgia": "https://a.espncdn.com/i/teamlogos/ncaa/500/61.png",
+        "Georgia Tech": "https://a.espncdn.com/i/teamlogos/ncaa/500/59.png",
+        "Alabama": "https://a.espncdn.com/i/teamlogos/ncaa/500/333.png",
+    }
+    return logos.get(team_name, "https://a.espncdn.com/i/teamlogos/ncaa/500/default.png")
+
+# Format team names with logos + spreads
 def format_team(name, spread, home=True):
     if pd.isna(spread):
-        return name
-    spread_str = f"{spread:+}" if home else f"{-spread:+}"
-    return f"{name} ({spread_str})"
+        spread_str = ""
+    else:
+        spread_str = f" ({spread:+})" if home else f" ({-spread:+})"
+    logo = team_logo_url(name)
+    return f"![]({logo}) {name}{spread_str}"
 
 preds["Home Team"] = preds.apply(lambda r: format_team(r["homeTeam"], r["consensus_spread"], home=True), axis=1)
 preds["Away Team"] = preds.apply(lambda r: format_team(r["awayTeam"], r["consensus_spread"], home=False), axis=1)
@@ -36,21 +47,8 @@ preds["Projected Winner"] = preds.apply(
     lambda r: r["homeTeam"] if r["home_win_prob"] >= 0.5 else r["awayTeam"], axis=1
 )
 
-# --- Add team logos (simple placeholder version using ESPN logo links) ---
-# Example: https://a.espncdn.com/i/teamlogos/ncaa/500/61.png
-def team_logo_url(team_name):
-    # This is a placeholder map - you'd expand it with your actual team dataset
-    logos = {
-        "Georgia": "https://a.espncdn.com/i/teamlogos/ncaa/500/61.png",
-        "Georgia Tech": "https://a.espncdn.com/i/teamlogos/ncaa/500/59.png",
-        "Alabama": "https://a.espncdn.com/i/teamlogos/ncaa/500/333.png",
-    }
-    return logos.get(team_name, "https://a.espncdn.com/i/teamlogos/ncaa/500/default.png")
-
-preds["Winner Logo"] = preds["Projected Winner"].apply(team_logo_url)
-
 # Build final display dataframe
-display_df = preds[["Home Team", "Away Team", "Projected Winner", "Projected Score", "Winner Logo"]]
+display_df = preds[["Home Team", "Away Team", "Projected Winner", "Projected Score"]]
 
 # --- Apply search filter ---
 if search:
@@ -59,8 +57,11 @@ if search:
         display_df["Away Team"].str.contains(search, case=False)
     ]
 
-# --- Display table ---
-st.dataframe(display_df, use_container_width=True)
+# --- Show table with markdown rendering ---
+st.markdown("### 📊 Predictions Table")
+st.write("Swipe left/right on mobile to view all columns 👇")
+
+st.write(display_df.to_markdown(index=False), unsafe_allow_html=True)
 
 
 
